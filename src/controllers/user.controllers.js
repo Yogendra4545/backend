@@ -4,6 +4,23 @@ import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/Api_Response.js";
 
+
+const generateAccessAndRefreshTokens = async(userId) => {
+    try {
+        const user = await User.findById(userId)
+
+       const accessToken =  user.generateAccessToken()
+       const refreshToken =  user.generateRefreshToken()
+
+       user.refreshToken = refreshToken
+      await user.save({validateBeforeSave: false})
+
+      return {accessToken, refreshToken}
+
+    } catch (error) {
+        throw new ApiError(500, "something went wrong while generating refresh and access token")
+    }
+}
 const registerUser = asyncHandler(async (req, res) => {
     // get user details from frontend
     //validation - not empty
@@ -37,7 +54,7 @@ if (
 
     // 3 check if user already exists: username, email
 
-   const existedUseer =  User.findOne({
+   const existedUseer =  await User.findOne({
         $or: [{username}, {email}]
     })
  
@@ -71,7 +88,7 @@ if (
         coverImage: coverImage?.url || "",
         email,
         password,
-        username: username.toLowerCase()
+        username: username.toLowerCase() 
     })
      
     const createdUser = await User.findById(user._id).select(
@@ -88,4 +105,42 @@ if (
 
 })
 
-export {registerUser}
+const loginUser = asyncHandler(async (req, res)=> {
+     
+    // req body -> data
+    // username or email
+    // find the user
+    // password check
+    // access and refresh token
+    // send cookie
+
+    const {email, username, password} = req.body
+
+    if(!username || !email) {
+        throw new ApiError(400, "username or password is required")
+    }
+
+  const user =  await User.findOne({
+        $or: [{username}, {email}]
+    })
+    
+    if(!user) {
+        throw new ApiError(404, "User does not exist")
+    }
+  
+     const isPasswordValid =  await user.isPasswordCorrect(password)
+     
+     if(!isPasswordValid) {
+        throw new ApiError(401, "invalid user credentials")
+    }
+
+  const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id)
+  
+  const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+
+})
+export {
+    registerUser,
+    loginUser
+}
